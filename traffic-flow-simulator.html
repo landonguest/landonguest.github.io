@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Traffic Flow Simulator | Transportation Engineering</title>
+<meta name="description" content="Interactive traffic flow simulator demonstrating the Greenshields speed-density-flow model used in transportation engineering.">
+<style>
+  :root{
+    --bg:#F6F6F2;
+    --surface:#FFFFFF;
+    --ink:#1C1E22;
+    --navy:#17324F;
+    --navy-light:#2C5478;
+    --orange:#BF5700;
+    --line:#DAD9D2;
+    --steel:#5B6B7A;
+    --grid:#E8E7E0;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:Arial, Helvetica, sans-serif;
+    font-weight:700;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  input, button, select, textarea{ font-family:inherit; font-weight:inherit; }
+  .wrap{ max-width:980px; margin:0 auto; padding:48px 24px 90px; }
+
+  h1{ font-size:clamp(1.9rem, 4.5vw, 2.7rem); margin:0 0 10px; letter-spacing:-0.01em; }
+  .hero-sub{ color:var(--orange); font-size:1.2rem; margin:0 0 22px; }
+  .hero-intro{ max-width:640px; color:var(--steel); font-size:1rem; margin:0; }
+
+  section{ margin-top:68px; }
+  h2.subtitle{ color:var(--orange); font-size:1.35rem; margin:0 0 8px; }
+  .section-lead{ color:var(--steel); max-width:640px; margin:0 0 26px; font-size:0.98rem; }
+
+  /* road / hero card */
+  .road-card{
+    position:relative;
+    background:var(--surface);
+    border:1px solid var(--line);
+    padding:30px;
+    margin-top:36px;
+  }
+  .road-card::before, .road-card::after,
+  .road-card .br-tl, .road-card .br-br{
+    content:"";
+    position:absolute;
+    width:22px; height:22px;
+    pointer-events:none;
+  }
+  .road-card::before{ top:-1px; left:-1px; border-top:3px solid var(--navy); border-left:3px solid var(--navy); }
+  .road-card::after{ bottom:-1px; right:-1px; border-bottom:3px solid var(--navy); border-right:3px solid var(--navy); }
+
+  canvas#roadCanvas{ display:block; width:100%; height:150px; }
+  .road-caption{ color:var(--steel); font-size:0.85rem; margin:10px 0 0; }
+
+  .stat-row{ display:flex; flex-wrap:wrap; gap:14px; margin-top:24px; }
+  .stat{ flex:1 1 130px; border:1px solid var(--line); padding:12px 14px; }
+  .stat .label{ font-size:0.72rem; color:var(--steel); margin-bottom:6px; }
+  .stat .value{ font-size:1.5rem; color:var(--navy); }
+  .stat .unit{ font-size:0.75rem; color:var(--steel); margin-left:2px; }
+  .los-badge{ display:inline-block; padding:3px 10px; color:#fff; font-size:1.3rem; }
+  .los-desc{ font-size:0.78rem; color:var(--steel); margin-top:6px; }
+
+  .controls{ display:flex; align-items:center; gap:18px; margin-top:26px; flex-wrap:wrap; }
+  .slider-block{ flex:1; min-width:220px; }
+  .slider-block label{ display:block; font-size:0.85rem; margin-bottom:8px; }
+  input[type=range]{ width:100%; accent-color:var(--navy); height:6px; }
+  button{
+    font-family:inherit; font-weight:700; font-size:0.9rem;
+    background:var(--navy); color:#fff; border:none;
+    padding:11px 18px; cursor:pointer; white-space:nowrap;
+  }
+  button:hover{ background:var(--navy-light); }
+  button.ghost{ background:transparent; color:var(--navy); border:1px solid var(--line); }
+  button.ghost:hover{ background:var(--grid); }
+  button:focus-visible, input:focus-visible, summary:focus-visible{
+    outline:3px solid var(--orange); outline-offset:2px;
+  }
+
+  details.advanced{ margin-top:26px; border:1px solid var(--line); padding:16px 20px; background:var(--surface); }
+  details.advanced summary{ cursor:pointer; color:var(--navy); font-size:0.95rem; }
+  .adv-grid{ display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:20px; }
+  .adv-grid .field label{ display:block; font-size:0.85rem; margin-bottom:8px; }
+  .adv-readout{ display:flex; gap:24px; margin-top:20px; flex-wrap:wrap; }
+  .adv-readout div{ font-size:0.85rem; color:var(--steel); }
+  .adv-readout strong{ color:var(--navy); display:block; font-size:1.15rem; }
+  .adv-reset{ margin-top:18px; }
+  @media (max-width:640px){ .adv-grid{ grid-template-columns:1fr; } }
+
+  .chart-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; }
+  @media (max-width:800px){ .chart-grid{ grid-template-columns:1fr; } }
+  .chart-card{ border:1px solid var(--line); padding:16px; background:var(--surface); }
+  .chart-card svg{ width:100%; height:auto; display:block; }
+  .chart-caption{ margin:10px 0 0; font-size:0.82rem; color:var(--steel); text-align:center; }
+  .gridline{ stroke:var(--grid); stroke-width:1; }
+  .axis{ stroke:var(--ink); stroke-width:1.4; }
+  .curve{ fill:none; stroke:var(--navy); stroke-width:2.5; }
+  .guide{ stroke:var(--orange); stroke-width:1; stroke-dasharray:3,3; }
+  .marker{ fill:var(--orange); stroke:#fff; stroke-width:1.5; }
+  .tick{ font-family:Arial, Helvetica, sans-serif; font-weight:700; font-size:9px; fill:var(--steel); }
+
+  .callout{ border-left:4px solid var(--orange); background:var(--surface); border-top:1px solid var(--line); border-right:1px solid var(--line); border-bottom:1px solid var(--line); padding:16px 20px; margin-top:28px; max-width:680px; }
+  .callout .callout-label{ color:var(--navy); font-size:0.85rem; margin-bottom:6px; }
+  .callout p{ margin:0; font-size:0.92rem; color:var(--ink); }
+
+  .steps{ padding-left:20px; max-width:640px; margin:0; }
+  .steps li{ margin-bottom:12px; }
+
+  .glossary{ display:grid; grid-template-columns:190px 1fr; gap:6px 20px; margin-top:30px; border-top:1px solid var(--line); padding-top:22px; max-width:760px; }
+  .glossary dt{ color:var(--navy); }
+  .glossary dd{ margin:0 0 16px; font-size:0.94rem; }
+
+  table{ width:100%; border-collapse:collapse; margin-top:6px; }
+  th, td{ text-align:left; padding:11px 12px; border-bottom:1px solid var(--line); font-size:0.92rem; }
+  th{ color:var(--steel); font-size:0.75rem; border-bottom:2px solid var(--ink); }
+  .grade-cell{ display:inline-flex; align-items:center; gap:9px; }
+  .grade-swatch{ width:13px; height:13px; display:inline-block; }
+
+  .limits ul{ padding-left:20px; max-width:700px; margin:0; }
+  .limits li{ margin-bottom:12px; font-size:0.94rem; }
+
+  footer{ margin-top:90px; padding-top:22px; border-top:1px solid var(--line); color:var(--steel); font-size:0.85rem; }
+  footer p{ margin:0 0 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Traffic Flow Simulator</h1>
+    <p class="hero-sub">How traffic density turns free flow into gridlock</p>
+    <p class="hero-intro">Every roadway has a breaking point. Add enough vehicles to a single lane and a smooth, free-flowing highway can flip into stop-and-go traffic, with no crash, no ramp, and no lane closure required. This simulator uses the Greenshields model, a foundational relationship in transportation engineering, to show exactly how that happens. Drag the slider below to add traffic and watch speed, flow, and Level of Service respond in real time.</p>
+  </header>
+
+  <section class="road-section">
+    <div class="road-card">
+      <canvas id="roadCanvas"></canvas>
+      <p class="road-caption">Single lane, quarter-mile segment shown (loops continuously).</p>
+
+      <div class="stat-row">
+        <div class="stat">
+          <div class="label">Density</div>
+          <div class="value"><span id="densityValue">25</span><span class="unit">veh/mi/ln</span></div>
+        </div>
+        <div class="stat">
+          <div class="label">Speed</div>
+          <div class="value"><span id="speedValue">0</span><span class="unit">mph</span></div>
+        </div>
+        <div class="stat">
+          <div class="label">Flow</div>
+          <div class="value"><span id="flowValue">0</span><span class="unit">veh/hr/ln</span></div>
+        </div>
+        <div class="stat">
+          <div class="label">Level of Service</div>
+          <span id="losBadge" class="los-badge">C</span>
+          <div id="losDesc" class="los-desc"></div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="slider-block">
+          <label for="densitySlider">Traffic density (vehicles per mile per lane)</label>
+          <input type="range" id="densitySlider" min="0" max="140" step="1" value="25">
+        </div>
+        <button id="autoBtn">Run auto-demo</button>
+      </div>
+
+      <details class="advanced">
+        <summary>Customize the roadway</summary>
+        <div class="adv-grid">
+          <div class="field">
+            <label for="vfSlider">Free-flow speed: <span id="vfLabel">65 mph</span></label>
+            <input type="range" id="vfSlider" min="40" max="80" step="1" value="65">
+          </div>
+          <div class="field">
+            <label for="kjSlider">Jam density: <span id="kjLabel">140 veh/mi/ln</span></label>
+            <input type="range" id="kjSlider" min="80" max="220" step="5" value="140">
+          </div>
+        </div>
+        <div class="adv-readout">
+          <div>Capacity<strong><span id="capacityValue">2275</span> veh/hr/ln</strong></div>
+          <div>Critical density<strong><span id="criticalDensityValue">70</span> veh/mi/ln</strong></div>
+        </div>
+        <button class="ghost adv-reset" id="resetAdvBtn">Reset to defaults</button>
+      </details>
+    </div>
+  </section>
+
+  <section class="diagrams-section">
+    <h2 class="subtitle">The fundamental diagrams</h2>
+    <p class="section-lead">Three views of the same relationship. As you move the slider above, the marker travels along each curve.</p>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <div id="chartFD"></div>
+        <p class="chart-caption">Flow vs. density (veh/hr/ln vs veh/mi/ln)</p>
+      </div>
+      <div class="chart-card">
+        <div id="chartSD"></div>
+        <p class="chart-caption">Speed vs. density (mph vs veh/mi/ln)</p>
+      </div>
+      <div class="chart-card">
+        <div id="chartSF"></div>
+        <p class="chart-caption">Speed vs. flow (mph vs veh/hr/ln)</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="callout-label">Field note</div>
+      <p>In 2008, Japanese researchers placed real drivers on a circular test track and asked them simply to hold a steady, even speed. A traffic jam still formed on its own, rippling backward through the line of cars with no crash and no bottleneck involved. Density alone was enough. The looping road above is built on that same idea.</p>
+    </div>
+  </section>
+
+  <section class="model-section">
+    <h2 class="subtitle">How the model works</h2>
+    <p class="section-lead">Four steps turn one slider position into a full picture of roadway performance.</p>
+    <ol class="steps">
+      <li><strong>Set a density.</strong> Choose how many vehicles occupy one mile of a single lane (k, in veh/mi/ln).</li>
+      <li><strong>The model computes speed.</strong> Greenshields' linear relationship, v = vf(1 &minus; k / kj), predicts the average speed drivers can hold at that density.</li>
+      <li><strong>Speed and density combine into flow.</strong> Flow, q = k &times; v, is the number of vehicles passing a fixed point each hour, the figure engineers use to size roadways.</li>
+      <li><strong>Density sets the Level of Service.</strong> The same density is checked against Highway Capacity Manual thresholds to assign a letter grade from A (free flow) to F (breakdown).</li>
+    </ol>
+
+    <dl class="glossary">
+      <dt>Density (k)</dt>
+      <dd>Vehicles occupying one mile of a single lane, in veh/mi/ln.</dd>
+      <dt>Speed (v)</dt>
+      <dd>Average speed of vehicles in the traffic stream, in mph.</dd>
+      <dt>Flow (q)</dt>
+      <dd>Vehicles passing a fixed point per hour, in veh/hr/ln. Equal to k &times; v.</dd>
+      <dt>Free-flow speed (vf)</dt>
+      <dd>The speed drivers choose when there is essentially no other traffic.</dd>
+      <dt>Jam density (kj)</dt>
+      <dd>The density at which vehicles sit bumper to bumper and speed drops to zero.</dd>
+      <dt>Critical density (kc)</dt>
+      <dd>The density at which flow is maximized, equal to kj / 2 under this model.</dd>
+      <dt>Capacity</dt>
+      <dd>The maximum possible flow rate, equal to vf &times; kj / 4 under this model.</dd>
+    </dl>
+  </section>
+
+  <section class="los-section">
+    <h2 class="subtitle">Level of Service</h2>
+    <p class="section-lead">Approximate density thresholds for a basic freeway segment with a free-flow speed near 70 mph.</p>
+    <table>
+      <thead>
+        <tr><th>Grade</th><th>Density (veh/mi/ln)</th><th>What it feels like</th></tr>
+      </thead>
+      <tbody id="losTableBody"></tbody>
+    </table>
+  </section>
+
+  <section class="limits-section">
+    <h2 class="subtitle">Assumptions and limitations</h2>
+    <div class="limits">
+      <ul>
+        <li>Greenshields' 1935 model assumes a straight-line relationship between speed and density. Real traffic data often fits other models, such as Greenberg's or Underwood's, more closely at very low or very high densities.</li>
+        <li>The model assumes one uniform lane with no ramps, weaving, curves, or incidents. Real freeways rarely behave this cleanly.</li>
+        <li>The Level of Service thresholds shown are simplified density cutoffs for a basic freeway segment. The full Highway Capacity Manual procedure also factors in free-flow speed category, heavy-vehicle adjustments, and terrain.</li>
+        <li>In practice, breakdown to LOS F often begins well before the mathematical capacity point shown here, since real driver behavior grows unstable before density theoretically maximizes flow. Push the slider past 45 veh/mi/ln to see that play out.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <p>Your Name</p>
+    <p>Civil and Transportation Engineering</p>
+    <p>Built with the Greenshields traffic flow model (1935) and Highway Capacity Manual Level of Service criteria.</p>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var state = { k: 25, vf: 65, kj: 140 };
+  var MAX_CARS = 30;
+  var MAX_PX_PER_SEC = 140;
+
+  var LOS_COLORS = { A:"#2F855A", B:"#5B8C3A", C:"#B79B1B", D:"#C97A1D", E:"#C1501D", F:"#A32020" };
+  var LOS_RANGES = { A:"0 to 11", B:"11 to 18", C:"18 to 26", D:"26 to 35", E:"35 to 45", F:"above 45" };
+  var LOS_DESC = {
+    A:"Free flow. Drivers move at their desired speed with almost no interaction from other vehicles.",
+    B:"Reasonably free flow. Speeds begin to be affected slightly by other traffic.",
+    C:"Stable flow. Most drivers are restricted in their freedom to pick a speed or change lanes.",
+    D:"Approaching unstable flow. Small increases in volume cause noticeable drops in speed.",
+    E:"At or near capacity. Flow is unstable and small disturbances can trigger breakdown.",
+    F:"Breakdown. Stop-and-go conditions where demand exceeds capacity."
+  };
+  var LOS_ORDER = ["A","B","C","D","E","F"];
+
+  function speedAt(k, vf, kj){ return Math.max(0, vf * (1 - k / kj)); }
+  function flowAt(k, vf, kj){ return k * speedAt(k, vf, kj); }
+  function losGrade(k){
+    if (k <= 11) return "A";
+    if (k <= 18) return "B";
+    if (k <= 26) return "C";
+    if (k <= 35) return "D";
+    if (k <= 45) return "E";
+    return "F";
+  }
+
+  // ---------- DOM refs ----------
+  var densitySlider = document.getElementById("densitySlider");
+  var vfSlider = document.getElementById("vfSlider");
+  var kjSlider = document.getElementById("kjSlider");
+  var vfLabel = document.getElementById("vfLabel");
+  var kjLabel = document.getElementById("kjLabel");
+  var densityValueEl = document.getElementById("densityValue");
+  var speedValueEl = document.getElementById("speedValue");
+  var flowValueEl = document.getElementById("flowValue");
+  var losBadgeEl = document.getElementById("losBadge");
+  var losDescEl = document.getElementById("losDesc");
+  var capacityEl = document.getElementById("capacityValue");
+  var criticalDensityEl = document.getElementById("criticalDensityValue");
+  var autoBtn = document.getElementById("autoBtn");
+  var resetAdvBtn = document.getElementById("resetAdvBtn");
+  var chartFD = document.getElementById("chartFD");
+  var chartSD = document.getElementById("chartSD");
+  var chartSF = document.getElementById("chartSF");
+
+  // ---------- LOS table ----------
+  (function buildLosTable(){
+    var tbody = document.getElementById("losTableBody");
+    var rows = "";
+    for (var i = 0; i < LOS_ORDER.length; i++){
+      var g = LOS_ORDER[i];
+      rows += '<tr><td><span class="grade-cell"><span class="grade-swatch" style="background:' + LOS_COLORS[g] + '"></span>' + g + '</span></td>' +
+              '<td>' + LOS_RANGES[g] + '</td>' +
+              '<td>' + LOS_DESC[g] + '</td></tr>';
+    }
+    tbody.innerHTML = rows;
+  })();
+
+  // ---------- chart builder ----------
+  function buildChartSVG(cfg){
+    var W = 300, H = 200, P = 32;
+    var sx = function(x){ return P + (x / cfg.xMax) * (W - P - 12); };
+    var sy = function(y){ return (H - P) - (y / cfg.yMax) * (H - P - 14); };
+
+    var grid = "";
+    for (var i = 0; i <= 4; i++){
+      var gy = (P + i * ((H - P - 14) / 4)).toFixed(1);
+      grid += '<line x1="' + P + '" y1="' + gy + '" x2="' + (W - 10) + '" y2="' + gy + '" class="gridline"/>';
+    }
+
+    var d = "";
+    for (var j = 0; j < cfg.points.length; j++){
+      var px = sx(cfg.points[j][0]).toFixed(1);
+      var py = sy(cfg.points[j][1]).toFixed(1);
+      d += (j === 0 ? "M " : "L ") + px + "," + py + " ";
+    }
+
+    var mx = sx(cfg.curX).toFixed(1);
+    var my = sy(cfg.curY).toFixed(1);
+
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">' +
+      grid +
+      '<line x1="' + P + '" y1="' + (H - P) + '" x2="' + (W - 10) + '" y2="' + (H - P) + '" class="axis"/>' +
+      '<line x1="' + P + '" y1="10" x2="' + P + '" y2="' + (H - P) + '" class="axis"/>' +
+      '<path d="' + d + '" class="curve"/>' +
+      '<line x1="' + mx + '" y1="' + my + '" x2="' + mx + '" y2="' + (H - P) + '" class="guide"/>' +
+      '<line x1="' + mx + '" y1="' + my + '" x2="' + P + '" y2="' + my + '" class="guide"/>' +
+      '<circle cx="' + mx + '" cy="' + my + '" r="5" class="marker"/>' +
+      '<text x="' + P + '" y="' + (H - 8) + '" class="tick">0</text>' +
+      '<text x="' + (W - 12) + '" y="' + (H - 8) + '" text-anchor="end" class="tick">' + Math.round(cfg.xMax / 1.1) + '</text>' +
+      '<text x="' + (P - 6) + '" y="16" text-anchor="end" class="tick">' + Math.round(cfg.yMax / 1.1) + '</text>' +
+      '<text x="' + (P - 6) + '" y="' + (H - P + 4) + '" text-anchor="end" class="tick">0</text>' +
+      '</svg>';
+  }
+
+  function sample(fn, n, xMax){
+    var pts = [];
+    for (var i = 0; i <= n; i++){
+      var k = (i / n) * xMax;
+      pts.push(fn(k));
+    }
+    return pts;
+  }
+
+  function drawCharts(){
+    var vf = state.vf, kj = state.kj, k = state.k;
+    var v = speedAt(k, vf, kj);
+    var q = flowAt(k, vf, kj);
+    var capacity = vf * kj / 4;
+
+    var fdPoints = sample(function(ki){ return [ki, flowAt(ki, vf, kj)]; }, 40, kj);
+    chartFD.innerHTML = buildChartSVG({ xMax: kj * 1.02, yMax: capacity * 1.15, points: fdPoints, curX: k, curY: q });
+
+    var sdPoints = sample(function(ki){ return [ki, speedAt(ki, vf, kj)]; }, 40, kj);
+    chartSD.innerHTML = buildChartSVG({ xMax: kj * 1.02, yMax: vf * 1.1, points: sdPoints, curX: k, curY: v });
+
+    var sfPoints = sample(function(ki){ return [flowAt(ki, vf, kj), speedAt(ki, vf, kj)]; }, 40, kj);
+    chartSF.innerHTML = buildChartSVG({ xMax: capacity * 1.15, yMax: vf * 1.1, points: sfPoints, curX: q, curY: v });
+  }
+
+  // ---------- road animation ----------
+  var canvas = document.getElementById("roadCanvas");
+  var ctx = canvas.getContext("2d");
+  var cars = [];
+  var roadOffset = 0;
+  var CAR_PALETTE = ["#17324F", "#5B6B7A", "#BF5700", "#2F855A"];
+
+  function regenerateCars(n){
+    cars = [];
+    for (var i = 0; i < n; i++){
+      cars.push({ frac: n > 0 ? i / n : 0, color: CAR_PALETTE[i % CAR_PALETTE.length] });
+    }
+  }
+
+  function resizeCanvas(){
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var cssHeight = 150;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr));
+    canvas.height = Math.round(cssHeight * dpr);
+    canvas.style.height = cssHeight + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function drawRoad(){
+    var cssWidth = canvas.getBoundingClientRect().width;
+    var cssHeight = 150;
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+    ctx.fillStyle = "#3B3F42";
+    ctx.fillRect(0, 20, cssWidth, cssHeight - 40);
+
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 21); ctx.lineTo(cssWidth, 21);
+    ctx.moveTo(0, cssHeight - 21); ctx.lineTo(cssWidth, cssHeight - 21);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255,255,255,0.45)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([16, 14]);
+    ctx.lineDashOffset = -roadOffset;
+    ctx.beginPath();
+    ctx.moveTo(0, cssHeight / 2); ctx.lineTo(cssWidth, cssHeight / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    var carW = 26, carH = 14;
+    for (var i = 0; i < cars.length; i++){
+      var x = cars[i].frac * cssWidth;
+      var y = cssHeight / 2;
+      ctx.fillStyle = cars[i].color;
+      ctx.beginPath();
+      if (ctx.roundRect){ ctx.roundRect(x - carW / 2, y - carH / 2, carW, carH, 3); }
+      else { ctx.rect(x - carW / 2, y - carH / 2, carW, carH); }
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.fillRect(x + carW / 2 - 9, y - carH / 2 + 3, 5, carH - 6);
+    }
+  }
+
+  var lastTs = null;
+  function animate(ts){
+    if (lastTs === null) lastTs = ts;
+    var dt = (ts - lastTs) / 1000;
+    lastTs = ts;
+    var v = speedAt(state.k, state.vf, state.kj);
+    var pxPerSec = (v / state.vf) * MAX_PX_PER_SEC;
+    var cssWidth = canvas.getBoundingClientRect().width || 1;
+    var dFrac = (pxPerSec * dt) / cssWidth;
+    roadOffset = (roadOffset + pxPerSec * dt) % 30;
+    for (var i = 0; i < cars.length; i++){
+      cars[i].frac = (cars[i].frac + dFrac) % 1;
+      if (cars[i].frac < 0) cars[i].frac += 1;
+    }
+    drawRoad();
+    requestAnimationFrame(animate);
+  }
+
+  // ---------- main update ----------
+  function update(){
+    var k = state.k, vf = state.vf, kj = state.kj;
+    var v = speedAt(k, vf, kj);
+    var q = flowAt(k, vf, kj);
+    var grade = losGrade(k);
+
+    densityValueEl.textContent = Math.round(k);
+    speedValueEl.textContent = v.toFixed(1);
+    flowValueEl.textContent = Math.round(q);
+    losBadgeEl.textContent = grade;
+    losBadgeEl.style.background = LOS_COLORS[grade];
+    losDescEl.textContent = LOS_DESC[grade];
+
+    var n = Math.max(0, Math.round((kj > 0 ? k / kj : 0) * MAX_CARS));
+    if (n !== cars.length) regenerateCars(n);
+
+    capacityEl.textContent = Math.round(vf * kj / 4);
+    criticalDensityEl.textContent = Math.round(kj / 2);
+
+    drawCharts();
+  }
+
+  // ---------- auto-demo ----------
+  var autoRunning = false;
+  var autoDir = 1;
+  var autoTimer = null;
+
+  function stopAuto(){
+    autoRunning = false;
+    autoBtn.textContent = "Run auto-demo";
+    if (autoTimer){ clearInterval(autoTimer); autoTimer = null; }
+  }
+
+  function autoStep(){
+    var delta = state.kj / 100;
+    state.k += autoDir * delta;
+    if (state.k >= state.kj){ state.k = state.kj; autoDir = -1; }
+    if (state.k <= 0){ state.k = 0; autoDir = 1; }
+    densitySlider.value = state.k;
+    update();
+  }
+
+  autoBtn.addEventListener("click", function(){
+    if (autoRunning){
+      stopAuto();
+    } else {
+      autoRunning = true;
+      autoBtn.textContent = "Stop auto-demo";
+      autoTimer = setInterval(autoStep, 50);
+    }
+  });
+
+  // ---------- events ----------
+  densitySlider.addEventListener("input", function(){
+    if (autoRunning) stopAuto();
+    state.k = parseFloat(densitySlider.value);
+    update();
+  });
+
+  vfSlider.addEventListener("input", function(){
+    state.vf = parseFloat(vfSlider.value);
+    vfLabel.textContent = state.vf + " mph";
+    update();
+  });
+
+  kjSlider.addEventListener("input", function(){
+    state.kj = parseFloat(kjSlider.value);
+    kjLabel.textContent = state.kj + " veh/mi/ln";
+    densitySlider.max = state.kj;
+    if (state.k > state.kj){ state.k = state.kj; densitySlider.value = state.k; }
+    update();
+  });
+
+  resetAdvBtn.addEventListener("click", function(){
+    state.vf = 65; state.kj = 140; state.k = 25;
+    vfSlider.value = 65; kjSlider.value = 140; densitySlider.max = 140; densitySlider.value = 25;
+    vfLabel.textContent = "65 mph";
+    kjLabel.textContent = "140 veh/mi/ln";
+    if (autoRunning) stopAuto();
+    update();
+  });
+
+  window.addEventListener("resize", function(){
+    resizeCanvas();
+    drawRoad();
+  });
+
+  // ---------- init ----------
+  resizeCanvas();
+  regenerateCars(Math.round((state.k / state.kj) * MAX_CARS));
+  update();
+  requestAnimationFrame(animate);
+
+})();
+</script>
+</body>
+</html>
